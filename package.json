@@ -6,7 +6,8 @@
     "vite": "^5.2.10"
   },
   "scripts": {
-    "start": "vite --host 0.0.0.0 --port $PORT" 
+    "start": "vite --https",
+    "dev": "vite"
   }
 }
 

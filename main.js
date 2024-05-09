@@ -2,6 +2,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { GLTFLoader } from 'three/examples/jsm/Addons.js';
+import { EffectComposer } from 'three/examples/jsm/Addons.js';
+import { OutlinePass } from 'three/examples/jsm/Addons.js';
+import { ShaderPass } from 'three/examples/jsm/Addons.js';
+import { RenderPass } from 'three/examples/jsm/Addons.js';
 
 // scene and camera setup
 const scene = new THREE.Scene();
@@ -28,6 +32,40 @@ const canvas = document.createElement('canvas');
 canvas.width = 128; // width of the gradient image
 canvas.height = 128; // height of the gradient image
 
+// outline effect
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
+composer.addPass(outlinePass);
+
+// color inversion
+const invertShaderColor = {
+    uniforms: {
+        "tDiffuse": { value: null}
+    },
+    vertexShader: 
+    `
+    varying vec2 vUv; 
+    void main() {
+        vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); 
+    }
+    `,
+
+    fragmentShader: 
+    `
+    uniform sampler2D tDiffuse; 
+    varying vec2 vUv;
+    void main() {
+        vec4 texture = texture2D(tDiffuse, vUv); 
+        gl_FragColor = vec4(1.0 - texture.rgb, texture.a);
+    }
+    `
+};
+
+const invertShaderPass = new ShaderPass(invertShaderColor);
+invertShaderPass.enabled = false;
+composer.addPass(invertShaderPass);
+
 // get the 2D drawing context
 const context = canvas.getContext('2d');
 
@@ -53,8 +91,9 @@ loader.load('Island.glb', function(gltf) {
     island = gltf.scene;
     island.scale.set(1, 1, 1); // scale the model
     scene.add(island);
+    outlinePass.selectedObjects = [model];
 }, undefined, function(error){
-    console.error(error);
+    console.error('An error occured, during model loading.', error);
 });
 
 // add directional lighting
@@ -66,6 +105,23 @@ scene.add(directionalLight);
 const ambientLight = new THREE.AmbientLight(0xcccccc); // color
 scene.add(ambientLight);
 
+// camera depth slider
+const depthSlider = document.createElement('input');
+depthSlider.type = 'range';
+depthSlider.max = 3;
+depthSlider.min = 0.05;
+depthSlider.value = 1.5;
+depthSlider.step = 0.01;
+depthSlider.style.top = '10px';
+depthSlider.style.right = '10px';
+depthSlider.style.position = 'absolute';
+document.body.appendChild(depthSlider);
+depthSlider.oninput = function() {
+    camera.far = parseFloat(this.value) * 2;
+    camera.near = parseFloat(this.value) / 2;
+    camera.updateProjectionMatrix;
+}
+
 // recursive loop to render animation
 function animate() {
     requestAnimationFrame(animate);
@@ -75,9 +131,11 @@ function animate() {
         island.rotation.y += 0.005; // rotate island
     }
 
+    composer.render()
+
     controller.update();
 
-    renderer.render(scene, camera);
+    
 }
 
 animate();
